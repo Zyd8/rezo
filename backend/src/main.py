@@ -1,8 +1,13 @@
+from flask import Flask
 import whisper
 import os
 
-os.makedirs("models", exist_ok=True)
+app = Flask(__name__)
 
-model = whisper.load_model("base", download_root="../models")
-result = model.transcribe("../audio.wav", fp16=False)
-print(result["text"])
+@app.route("/")
+def hello_world():
+    return "<p>Hello, My Personal Project!</p>"
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=4124)
