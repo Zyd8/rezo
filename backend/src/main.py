@@ -5,6 +5,7 @@ import base64
 import json
 import urllib.request
 import urllib.parse
+import urllib.error
 from pathlib import Path
 
 env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -27,35 +28,41 @@ def github_authorize():
     url = "https://github.com/login/oauth/authorize?" + urllib.parse.urlencode(params)
     return redirect(url)
 
-@app.route("/github_access_token", methods=["POST"])
-def github_access_token():
-    code = request.args.get("code") or (request.get_json(silent=True) or {}).get("code")
+
+@app.route("/auth/github/callback", methods=["GET"])
+def github_callback():
+    code = request.args.get("code")
     if not code:
         return jsonify({"error": "missing code"}), 400
 
     client_id = os.getenv("GITHUB_CLIENT_ID")
     client_secret = os.getenv("GITHUB_CLIENT_SECRET")
+    redirect_uri = "http://localhost:4124/auth/github/callback"
+
     data = urllib.parse.urlencode({
         "client_id": client_id,
         "client_secret": client_secret,
         "code": code,
+        "redirect_uri": redirect_uri,
     }).encode()
 
-    auth = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
     req = urllib.request.Request(
         "https://github.com/login/oauth/access_token",
         data=data,
         headers={
             "Accept": "application/json",
-            "Authorization": f"Basic {auth}",
-            "Content-Type": "application/x-www-form-urlencoded",
         },
         method="POST",
     )
-    with urllib.request.urlopen(req) as resp:
-        body = resp.read().decode()
-    return jsonify(json.loads(body))
+    try:
+        with urllib.request.urlopen(req) as resp:
+            body = resp.read().decode()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        return jsonify({"error": "token exchange failed", "details": body}), 400
 
+    token_data = json.loads(body)
+    return jsonify(token_data)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=4124)
